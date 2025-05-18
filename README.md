@@ -44,7 +44,6 @@
 
 1.  **Clone or Download:**
     * Clone the repository: `git clone https://github.com/YourUsername/your-repository-name.git`
-    * Or download the `index.html` file.
 2.  **Open in Browser:**
     * Simply open https://vladanila.github.io/imagist/
 
