@@ -39,7 +39,24 @@ body {
     -webkit-font-smoothing: antialiased; 
     -moz-osx-font-smoothing: grayscale;
     padding-bottom: 2rem; 
+    
+    /* Disable text selection for the entire body */
+    -webkit-user-select: none; /* Safari */
+    -moz-user-select: none;    /* Firefox */
+    -ms-user-select: none;     /* Internet Explorer/Edge */
+    user-select: none;         /* Standard syntax */
 }
+
+/* Allow text selection in input fields and textareas explicitly if needed */
+input[type="text"],
+input[type="number"],
+textarea {
+    -webkit-user-select: text; /* Safari */
+    -moz-user-select: text;    /* Firefox */
+    -ms-user-select: text;     /* Internet Explorer/Edge */
+    user-select: text;         /* Standard syntax */
+}
+
 
 ::-webkit-scrollbar { 
     width: 8px; 
