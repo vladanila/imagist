@@ -1,8 +1,7 @@
 # Imagist: A Minimalist Web-Based Image Editor
 
-![Imagist Screenshot](placeholder_screenshot.png) **Imagist** is a lightweight, client-side image editing tool built with HTML, CSS (Tailwind CSS and custom styles), and vanilla JavaScript. It offers a clean, modern, and intuitive interface, inspired by Apple's design aesthetic, allowing users to perform common image manipulation tasks directly in their browser.
+**Imagist** is a lightweight, client-side image editing tool built with HTML, CSS (Tailwind CSS and custom styles), and vanilla JavaScript. It offers a clean, modern, and intuitive interface, inspired by Apple's design aesthetic, allowing users to perform common image manipulation tasks directly in their browser.
 
-**Live Demo:** [Link to your GitHub Pages site once deployed - e.g., `https://YourUsername.github.io/your-repository-name/`]
 
 ## Key Features:
 
@@ -47,7 +46,7 @@
     * Clone the repository: `git clone https://github.com/YourUsername/your-repository-name.git`
     * Or download the `index.html` file.
 2.  **Open in Browser:**
-    * Simply open the `index.html` file in a modern web browser.
+    * Simply open https://vladanila.github.io/imagist/
 
 No installation or build steps are required as all code is self-contained in `index.html`.
 
@@ -67,12 +66,8 @@ This project is ideal for users who need quick edits without the complexity of p
 * Keyboard shortcuts.
 * Zoom and Pan for image preview.
 
-## Author & Credits
-
 A project by **Geetartha Sarma**
-
 * Instagram: [https://www.instagram.com/geetartha.sarma/](https://www.instagram.com/geetartha.sarma/)
 * X (Twitter): [https://x.com/geetartha373](https://x.com/geetartha373)
 * GitHub: [https://github.com/vladanila/vladanila.github.io](https://github.com/vladanila/vladanila.github.io) ---
 
-Feel free to customize this further! For example, you might want to add a screenshot of the application. You can do this by taking a screenshot, adding it to your GitHub repository (e.g., in an `assets` folder or directly in the root), and then updating the `![Imagist Screenshot](placeholder_screenshot.png)` line with the correct path to your image.
