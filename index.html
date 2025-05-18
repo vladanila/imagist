@@ -40,7 +40,9 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div class="md:col-span-1 space-y-6">
                 <div class="tool-section" id="upload-tool-section">
-                    <h3>Upload Image</h3>
+                    <h3 class="flex items-center"> <svg class="tool-header-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                        <span>Upload Image</span>
+                    </h3>
                     <label for="file-upload" class="btn btn-primary w-full text-center block">
                         Choose File
                     </label>
@@ -51,8 +53,7 @@
 
                 <div id="tools-container" class="space-y-6 hidden"> 
                     <div class="tool-section" id="crop-tool-section">
-                        <h3>Crop</h3>
-                        <div class="mb-3">
+                        <h3>Crop</h3> <div class="mb-3">
                             <label class="block text-sm font-medium mb-1" style="color: var(--text-secondary);">Aspect Ratio:</label>
                             <div class="flex flex-wrap gap-2 crop-preset-group">
                                 <button class="btn btn-preset active" data-ratio="NaN">Free</button>
@@ -71,8 +72,7 @@
                     </div>
                     
                     <div class="tool-section" id="transform-tool-section">
-                        <h3>Transform</h3>
-                        <div class="grid grid-cols-2 gap-2 transform-btn-group">
+                        <h3>Transform</h3> <div class="grid grid-cols-2 gap-2 transform-btn-group">
                             <button id="rotate-left-btn" class="btn">Rotate Left 90°</button>
                             <button id="rotate-right-btn" class="btn">Rotate Right 90°</button>
                             <button id="flip-horizontal-btn" class="btn">Flip Horizontal</button>
@@ -81,8 +81,7 @@
                     </div>
 
                     <div class="tool-section" id="filters-tool-section">
-                        <h3>Filters</h3>
-                        <div class="grid grid-cols-2 gap-2 filter-btn-group">
+                        <h3>Filters</h3> <div class="grid grid-cols-2 gap-2 filter-btn-group">
                             <button id="filter-grayscale" class="btn">Grayscale</button>
                             <button id="filter-sepia" class="btn">Sepia</button>
                             <button id="filter-invert" class="btn">Invert</button>
@@ -99,8 +98,7 @@
                     </div>
 
                     <div class="tool-section" id="resize-tool-section">
-                         <h3>Resize</h3>
-                        <div class="grid grid-cols-2 gap-3 mb-3">
+                         <h3>Resize</h3> <div class="grid grid-cols-2 gap-3 mb-3">
                             <div>
                                 <label for="resize-width" class="block text-sm font-medium mb-1" style="color: var(--text-secondary);">Width (px)</label>
                                 <input type="number" id="resize-width" class="input-field w-full" placeholder="e.g., 800">
@@ -118,8 +116,7 @@
                     </div>
 
                     <div class="tool-section" id="download-tool-section">
-                        <h3>Download</h3>
-                        <div class="mb-3">
+                        <h3>Download</h3> <div class="mb-3">
                             <label for="file-format" class="block text-sm font-medium mb-1" style="color: var(--text-secondary);">Format</label>
                             <select id="file-format" class="input-field w-full">
                                 <option value="image/png">PNG</option>
