@@ -145,15 +145,23 @@ textarea {
     margin-bottom: 1rem; 
     padding-bottom: 0.5rem; 
     border-bottom: 1px solid var(--border-color);
+    /* display: flex; and align-items: center; are handled by Tailwind classes in HTML */
 }
+
+.tool-header-icon {
+    width: 1.125rem; /* Equivalent to Tailwind h-4.5 or w-4.5 */
+    height: 1.125rem;
+    margin-right: 0.5rem; /* Equivalent to Tailwind mr-2 */
+    fill: currentColor; /* Inherits color from parent h3 */
+    opacity: 0.7; /* Slightly subtle icon */
+}
+
 
 #image-preview-container {
     border: 2px dashed var(--border-color); 
     background-color: var(--background-secondary);
     transition: border-color 0.3s ease; 
     position: relative;
-    /* Tailwind classes for height: h-64 md:h-[500px] are in the HTML */
-    /* Ensure flex items within can scale correctly */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -163,12 +171,12 @@ textarea {
 }
 
 #image-canvas { 
-    display: block; /* Good for layout */
-    max-width: 100%; /* Scale down width to fit container */
-    max-height: 100%; /* Scale down height to fit container */
-    width: auto;     /* Maintain aspect ratio based on height constraint */
-    height: auto;    /* Maintain aspect ratio based on width constraint */
-    object-fit: contain; /* Influences how the content of the canvas is scaled if it were an img/video, less direct for canvas drawing but good to have */
+    display: block; 
+    max-width: 100%; 
+    max-height: 100%; 
+    width: auto;     
+    height: auto;    
+    object-fit: contain; 
     border-radius: 0.5rem; 
 }
 
