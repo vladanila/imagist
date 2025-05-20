@@ -59,10 +59,8 @@ This project is ideal for users who need quick edits without the complexity of p
 
 ## Future Enhancements (Potential Ideas):
 
-* Undo/Redo functionality.
 * More advanced filters (Blur, Sharpen, Vignette).
 * Text overlay tool.
-* Keyboard shortcuts.
 * Zoom and Pan for image preview.
 
 A project by **Geetartha Sarma**
