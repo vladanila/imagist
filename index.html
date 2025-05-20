@@ -140,9 +140,12 @@
             </div>
 
             <div class="md:col-span-2">
-                <div id="image-preview-container" class="w-full h-64 md:h-[500px] flex items-center justify-center rounded-lg p-2">
+                <div id="image-preview-container" class="w-full h-64 md:h-[500px] flex items-center justify-center rounded-lg p-2 relative">
                     <canvas id="image-canvas"></canvas>
                     <p id="image-placeholder" class="text-center" style="color: var(--text-secondary);">Image preview will appear here</p>
+                    <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center bg-opacity-50 hidden" style="background-color: var(--background-secondary_alpha_50, rgba(245,245,247,0.5));">
+                        <div class="spinner"></div>
+                    </div>
                 </div>
                 <div id="image-info-display" class="hidden">
                     <p><strong>File Name:</strong> <span id="info-file-name">-</span></p>
@@ -172,8 +175,10 @@
                         </div>
                     </div>
                 </div>
-                 <div class="mt-4 text-center md:text-right">
-                    <button id="reset-all-btn" class="btn hidden">Reset All Changes</button>
+                 <div id="history-controls" class="mt-4 text-center md:text-right space-x-2 hidden">
+                    <button id="view-original-btn" class="btn">View Original</button> <button id="undo-btn" class="btn">Undo</button>
+                    <button id="redo-btn" class="btn">Redo</button>
+                    <button id="reset-all-btn" class="btn">Reset All Changes</button>
                 </div>
             </div>
         </div>
