@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let originalFileType = '';
     let originalCanvasWidth = 0; 
     let originalCanvasHeight = 0;
-    let currentAspectRatio = NaN; // For crop presets, NaN means free
+    let currentAspectRatio = NaN; 
     let isViewingOriginal = false; 
 
     let currentFilters = { brightness: 100, contrast: 100, grayscale: 0, sepia: 0, invert: 0 };
@@ -314,18 +314,35 @@ document.addEventListener('DOMContentLoaded', () => {
         drawImageToCanvasAndCommit(currentImageStateForCanvas);
     });
 
+    // CORRECTED logic for discrete filters to be exclusive
     ['grayscale', 'sepia', 'invert'].forEach(type => {
         document.getElementById(`filter-${type}`).addEventListener('click', () => {
             if (cropper) return; 
-            currentFilters[type] = currentFilters[type] === 100 ? 0 : 100;
+            
+            const wasActive = currentFilters[type] === 100;
+
+            // Reset all discrete filter values (grayscale, sepia, invert)
+            currentFilters.grayscale = 0;
+            currentFilters.sepia = 0;
+            currentFilters.invert = 0;
+
+            // If the clicked filter was not previously active, activate it.
+            // If it was active, clicking it again means it's now off (due to the reset above).
+            if (!wasActive) {
+                currentFilters[type] = 100;
+            }
+            // Brightness and contrast remain as they are
             drawImageToCanvasAndCommit(currentImageStateForCanvas); 
         });
     });
+
     document.getElementById('filter-none').addEventListener('click', () => {
         if (cropper) return;
-        resetFilterControlsToDefaults();
+        // This will reset brightness/contrast to 100 and discrete filters to 0
+        resetFilterControlsToDefaults(); 
         drawImageToCanvasAndCommit(currentImageStateForCanvas); 
     });
+
     function resetFilterControlsToDefaults() {
         currentFilters = { brightness: 100, contrast: 100, grayscale: 0, sepia: 0, invert: 0 };
         brightnessSlider.value = 100; contrastSlider.value = 100;
@@ -407,7 +424,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateActivePresetButton() {
         cropPresetButtons.forEach(button => {
             const ratio = parseFloat(button.dataset.ratio);
-            // Check for NaN explicitly for the "Free" button
             if ((isNaN(currentAspectRatio) && isNaN(ratio)) || currentAspectRatio === ratio) {
                 button.classList.add('active');
             } else {
@@ -418,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cropPresetButtons.forEach(button => {
         button.addEventListener('click', () => {
-            currentAspectRatio = parseFloat(button.dataset.ratio); // This will be NaN for "Free"
+            currentAspectRatio = parseFloat(button.dataset.ratio); 
             updateActivePresetButton();
             if (cropper) {
                 cropper.setAspectRatio(currentAspectRatio);
@@ -505,7 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 imageCanvas.width = img.naturalWidth;
                 imageCanvas.height = img.naturalHeight;
             }
-            ctx.filter = 'none'; // No filters when viewing original
+            ctx.filter = 'none'; 
             ctx.drawImage(img, 0, 0);
         };
         img.src = originalImage;
@@ -544,9 +560,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- Format & Download ---
-    fileFormatSelect.addEventListener('change', () => { /* ... same ... */ });
-    jpegQualitySlider.addEventListener('input', (e) => { /* ... same ... */ });
-    downloadBtn.addEventListener('click', () => { /* ... same ... */ });
+    fileFormatSelect.addEventListener('change', () => { 
+        jpegQualitySection.classList.toggle('hidden', fileFormatSelect.value !== 'image/jpeg');
+    });
+    jpegQualitySlider.addEventListener('input', (e) => { 
+        jpegQualityValueDisplay.textContent = parseFloat(e.target.value).toFixed(2);
+    });
+    downloadBtn.addEventListener('click', () => {
+        if (!currentImageStateForCanvas) { showModal('No image to download.'); return; }
+        if (cropper) { showModal('Confirm or cancel crop first.'); return;}
+        
+        showSpinner(); 
+
+        const imgToDownload = new Image();
+        imgToDownload.onload = () => {
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = imgToDownload.naturalWidth; // Use naturalWidth of the loaded image state
+            tempCanvas.height = imgToDownload.naturalHeight; // Use naturalHeight
+            
+            // Apply the final set of filters from currentFilters
+            tempCtx.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
+            tempCtx.drawImage(imgToDownload, 0, 0);
+
+            const format = fileFormatSelect.value;
+            const quality = (format === 'image/jpeg') ? parseFloat(jpegQualitySlider.value) : undefined;
+            const dataURL = tempCanvas.toDataURL(format, quality); 
+            const link = document.createElement('a');
+            const extension = format.split('/')[1];
+            link.download = `Imagist_edited.${extension}`;
+            link.href = dataURL;
+            document.body.appendChild(link); 
+            link.click(); 
+            document.body.removeChild(link);
+            hideSpinner(); 
+            showModal(`Image downloaded as Imagist_edited.${extension}`);
+        };
+        imgToDownload.onerror = () => {
+            hideSpinner();
+            showModal("Error preparing image for download.");
+        }
+        // Ensure the source for download is the most up-to-date visual state on the main canvas
+        // which should be currentImageStateForCanvas, but after any live previews are "baked in"
+        // The current logic correctly uses currentImageStateForCanvas as base, and applies currentFilters on top for download.
+        imgToDownload.src = currentImageStateForCanvas; 
+    });
 
     // --- Reset All ---
     resetAllBtn.addEventListener('click', () => {
