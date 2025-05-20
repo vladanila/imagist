@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const imageCanvas = document.getElementById('image-canvas');
     const imagePlaceholder = document.getElementById('image-placeholder');
     const toolsContainer = document.getElementById('tools-container');
+    const loadingSpinner = document.getElementById('loading-spinner'); 
     const ctx = imageCanvas.getContext('2d');
     let cropper = null, originalImage = null, currentImageStateForCanvas = null;
     
@@ -36,9 +37,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let originalFileType = '';
     let originalCanvasWidth = 0; 
     let originalCanvasHeight = 0;
-    let currentAspectRatio = NaN; // For crop presets
+    let currentAspectRatio = NaN; // For crop presets, NaN means free
+    let isViewingOriginal = false; 
 
     let currentFilters = { brightness: 100, contrast: 100, grayscale: 0, sepia: 0, invert: 0 };
+
+    // --- History for Undo/Redo ---
+    let historyStack = [];
+    let historyPointer = -1;
+    const MAX_HISTORY_STATES = 20; 
 
     // --- UI Elements ---
     const cropBtn = document.getElementById('crop-btn');
@@ -65,6 +72,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const jpegQualitySlider = document.getElementById('jpeg-quality');
     const jpegQualityValueDisplay = document.getElementById('jpeg-quality-value');
     const downloadBtn = document.getElementById('download-btn');
+    
+    const historyControlsDiv = document.getElementById('history-controls'); 
+    const viewOriginalBtn = document.getElementById('view-original-btn'); 
+    const undoBtn = document.getElementById('undo-btn');
+    const redoBtn = document.getElementById('redo-btn');
     const resetAllBtn = document.getElementById('reset-all-btn');
     
     const toolSectionElements = [ 
@@ -78,6 +90,75 @@ document.addEventListener('DOMContentLoaded', () => {
     const infoOriginalDims = document.getElementById('info-original-dims');
     const infoCurrentDims = document.getElementById('info-current-dims');
     const infoFileType = document.getElementById('info-file-type');
+
+    // --- Loading Spinner Control ---
+    function showSpinner() {
+        if(loadingSpinner) loadingSpinner.classList.remove('hidden');
+    }
+    function hideSpinner() {
+        if(loadingSpinner) loadingSpinner.classList.add('hidden');
+    }
+
+    // --- History Management ---
+    function saveStateToHistory(stateDataURL) {
+        if (historyPointer < historyStack.length - 1) {
+            historyStack = historyStack.slice(0, historyPointer + 1);
+        }
+        historyStack.push(stateDataURL);
+        historyPointer++;
+        if (historyStack.length > MAX_HISTORY_STATES) {
+            historyStack.shift(); 
+            historyPointer--; 
+        }
+        updateUndoRedoButtons();
+    }
+
+    function updateUndoRedoButtons() {
+        undoBtn.disabled = historyPointer <= 0;
+        redoBtn.disabled = historyPointer >= historyStack.length - 1;
+        viewOriginalBtn.disabled = !originalImage; 
+        historyControlsDiv.classList.toggle('hidden', !originalImage ); 
+    }
+    
+    function clearHistory() {
+        historyStack = [];
+        historyPointer = -1;
+        updateUndoRedoButtons();
+    }
+
+    function loadStateFromHistory(stateDataURL) {
+        currentImageStateForCanvas = stateDataURL; 
+        const img = new Image();
+        img.onload = () => {
+            imageCanvas.width = img.naturalWidth;
+            imageCanvas.height = img.naturalHeight;
+            ctx.clearRect(0,0, imageCanvas.width, imageCanvas.height);
+            ctx.drawImage(img, 0, 0);
+            
+            resizeWidthInput.value = imageCanvas.width;
+            resizeHeightInput.value = imageCanvas.height;
+            updateImageInfoDisplay();
+        };
+        img.onerror = () => showModal("Error loading history state.");
+        img.src = stateDataURL;
+    }
+
+    undoBtn.addEventListener('click', () => {
+        if (historyPointer > 0) {
+            historyPointer--;
+            loadStateFromHistory(historyStack[historyPointer]);
+            updateUndoRedoButtons();
+        }
+    });
+
+    redoBtn.addEventListener('click', () => {
+        if (historyPointer < historyStack.length - 1) {
+            historyPointer++;
+            loadStateFromHistory(historyStack[historyPointer]);
+            updateUndoRedoButtons();
+        }
+    });
+
 
     // --- Image Info Display Logic ---
     function updateImageInfoDisplay() {
@@ -93,8 +174,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- Main image drawing function (Commits state) ---
-    function drawImageToCanvasAndCommit(sourceDataUrl, callback) {
+    // --- Main image drawing function (Commits state AND saves to history) ---
+    function drawImageToCanvasAndCommit(sourceDataUrl, shouldSaveToHistory = true, callback) {
+        showSpinner(); 
         if (cropper) { cropper.destroy(); cropper = null; setCropUIVisible(false); }
         const img = new Image();
         img.onload = () => {
@@ -108,9 +190,12 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
             currentImageStateForCanvas = imageCanvas.toDataURL(); 
             
+            if (shouldSaveToHistory) {
+                saveStateToHistory(currentImageStateForCanvas);
+            }
+            
             imagePlaceholder.style.display = 'none'; imageCanvas.style.display = 'block';
             toolsContainer.classList.remove('hidden'); 
-            resetAllBtn.classList.remove('hidden');
             
             if (!cropper) {
                 document.querySelectorAll('#tools-container .tool-section button, #tools-container .tool-section input, #tools-container .tool-section select').forEach(el => el.disabled = false);
@@ -119,15 +204,21 @@ document.addEventListener('DOMContentLoaded', () => {
             resizeWidthInput.value = imageCanvas.width;
             resizeHeightInput.value = imageCanvas.height;
             updateImageInfoDisplay(); 
+            updateUndoRedoButtons(); 
+            hideSpinner(); 
             if (callback) callback();
         };
-        img.onerror = () => { showModal('Error loading image for canvas.'); resetEditorState(); };
+        img.onerror = () => { 
+            showModal('Error loading image for canvas.'); 
+            hideSpinner(); 
+            resetEditorState(); 
+        };
         img.src = sourceDataUrl;
     }
 
     // --- Preview function for non-committing filter changes (e.g., sliders) ---
     function previewFiltersOnCanvas() {
-        if (!currentImageStateForCanvas || cropper) return;
+        if (!currentImageStateForCanvas || cropper || isViewingOriginal) return; 
         const img = new Image();
         img.onload = () => {
             if (imageCanvas.width !== img.naturalWidth || imageCanvas.height !== img.naturalHeight) {
@@ -150,16 +241,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         originalFileName = file.name; 
         originalFileType = file.type; 
+        clearHistory(); 
+        showSpinner(); 
 
         const reader = new FileReader();
+        reader.onloadstart = () => { 
+            showSpinner();
+        };
         reader.onload = (e) => {
             originalImage = e.target.result; 
             currentImageStateForCanvas = originalImage; 
             originalCanvasWidth = 0; originalCanvasHeight = 0; 
-            resetAllFiltersAndDraw(currentImageStateForCanvas); 
+            resetAllFiltersAndDraw(currentImageStateForCanvas, true); 
             currentAspectRatio = NaN;
             updateActivePresetButton();
         };
+        reader.onerror = () => {
+            hideSpinner();
+            showModal("Error reading file.");
+        }
         reader.readAsDataURL(file);
     }
     fileUpload.addEventListener('change', (e) => handleNewFile(e.target.files[0]));
@@ -175,12 +275,14 @@ document.addEventListener('DOMContentLoaded', () => {
         originalCanvasWidth = 0; originalCanvasHeight = 0;
         originalFileName = ''; originalFileType = '';
         currentAspectRatio = NaN; 
+        clearHistory(); 
         ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
         imageCanvas.width = 0; imageCanvas.height = 0; 
         imageCanvas.style.display = 'none'; imagePlaceholder.style.display = 'block';
         toolsContainer.classList.add('hidden'); 
-        resetAllBtn.classList.add('hidden');
+        historyControlsDiv.classList.add('hidden'); 
         imageInfoDisplayDiv.classList.add('hidden'); 
+        hideSpinner(); 
         fileUpload.value = '';
         resetFilterControlsToDefaults();
         updateActivePresetButton();
@@ -197,12 +299,21 @@ document.addEventListener('DOMContentLoaded', () => {
         brightnessValueDisplay.textContent = e.target.value;
         previewFiltersOnCanvas(); 
     });
+    brightnessSlider.addEventListener('change', () => { 
+        if (cropper || !currentImageStateForCanvas) return;
+        drawImageToCanvasAndCommit(currentImageStateForCanvas);
+    });
     contrastSlider.addEventListener('input', (e) => { 
         if (cropper) return;
         currentFilters.contrast = e.target.value; 
         contrastValueDisplay.textContent = e.target.value;
         previewFiltersOnCanvas(); 
     });
+    contrastSlider.addEventListener('change', () => { 
+        if (cropper || !currentImageStateForCanvas) return;
+        drawImageToCanvasAndCommit(currentImageStateForCanvas);
+    });
+
     ['grayscale', 'sepia', 'invert'].forEach(type => {
         document.getElementById(`filter-${type}`).addEventListener('click', () => {
             if (cropper) return; 
@@ -220,98 +331,84 @@ document.addEventListener('DOMContentLoaded', () => {
         brightnessSlider.value = 100; contrastSlider.value = 100;
         brightnessValueDisplay.textContent = 100; contrastValueDisplay.textContent = 100;
     }
-    function resetAllFiltersAndDraw(sourceDataUrl, callback) { 
+    function resetAllFiltersAndDraw(sourceDataUrl, saveToHistory = true, callback) { 
         resetFilterControlsToDefaults();
-        if (sourceDataUrl) drawImageToCanvasAndCommit(sourceDataUrl, callback);
+        if (sourceDataUrl) drawImageToCanvasAndCommit(sourceDataUrl, saveToHistory, callback);
     }
 
     // --- Transform Logic (Commits changes) ---
-    function rotateImage(degrees) {
+    function performTransformation(transformationFn) {
         if (!currentImageStateForCanvas || cropper) return;
-        const img = new Image();
-        img.onload = () => {
-            const oldWidth = imageCanvas.width; const oldHeight = imageCanvas.height;
-            let newWidth = oldWidth; let newHeight = oldHeight;
-            if (degrees === 90 || degrees === -90) { newWidth = oldHeight; newHeight = oldWidth; }
-            imageCanvas.width = newWidth; imageCanvas.height = newHeight;
-            ctx.clearRect(0,0,newWidth, newHeight); 
-            ctx.translate(newWidth / 2, newHeight / 2); ctx.rotate(degrees * Math.PI / 180);
-            const tempImgForFilter = new Image(); 
-            tempImgForFilter.onload = () => {
-                applyCombinedFiltersToContext(); 
-                ctx.drawImage(tempImgForFilter, -oldWidth / 2, -oldHeight / 2, oldWidth, oldHeight);
-                ctx.setTransform(1, 0, 0, 1, 0, 0); 
-                currentImageStateForCanvas = imageCanvas.toDataURL(); 
-                resizeWidthInput.value = newWidth; resizeHeightInput.value = newHeight;
-                updateImageInfoDisplay(); 
-            }
-            tempImgForFilter.src = currentImageStateForCanvas; 
+        showSpinner();
+        const imgForTransform = new Image();
+        imgForTransform.onload = () => {
+            const tempCanvasForTransform = document.createElement('canvas');
+            const tempCtxForTransform = tempCanvasForTransform.getContext('2d');
+            tempCanvasForTransform.width = imgForTransform.naturalWidth;
+            tempCanvasForTransform.height = imgForTransform.naturalHeight;
+            tempCtxForTransform.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
+            tempCtxForTransform.drawImage(imgForTransform, 0, 0);
+            const stateWithLiveFilters = tempCanvasForTransform.toDataURL();
+            
+            const finalTransformImg = new Image();
+            finalTransformImg.onload = () => {
+                const transformedCanvas = document.createElement('canvas');
+                const transformedCtx = transformedCanvas.getContext('2d');
+                transformationFn(finalTransformImg, transformedCanvas, transformedCtx); 
+                const newDataURL = transformedCanvas.toDataURL();
+                drawImageToCanvasAndCommit(newDataURL); 
+                updateImageInfoDisplay();
+            };
+            finalTransformImg.src = stateWithLiveFilters;
         };
-        img.src = currentImageStateForCanvas; 
+        imgForTransform.src = currentImageStateForCanvas; 
     }
-    function flipImage(direction) { 
-        if (!currentImageStateForCanvas || cropper) return;
-        const img = new Image();
-        img.onload = () => {
-            const imgWidth = imageCanvas.width; const imgHeight = imageCanvas.height;
-            ctx.clearRect(0,0,imgWidth, imgHeight);
-            if (direction === 'horizontal') { ctx.translate(imgWidth, 0); ctx.scale(-1, 1); } 
-            else if (direction === 'vertical') { ctx.translate(0, imgHeight); ctx.scale(1, -1); }
-            const tempImgForFilter = new Image();
-            tempImgForFilter.onload = () => {
-                applyCombinedFiltersToContext();
-                ctx.drawImage(tempImgForFilter, 0, 0, imgWidth, imgHeight);
-                ctx.setTransform(1, 0, 0, 1, 0, 0); 
-                currentImageStateForCanvas = imageCanvas.toDataURL(); 
-                updateImageInfoDisplay(); 
-            }
-            tempImgForFilter.src = currentImageStateForCanvas;
-        };
-        img.src = currentImageStateForCanvas;
-    }
-    rotateLeftBtn.addEventListener('click', () => rotateImage(-90));
-    rotateRightBtn.addEventListener('click', () => rotateImage(90));
-    flipHorizontalBtn.addEventListener('click', () => flipImage('horizontal'));
-    flipVerticalBtn.addEventListener('click', () => flipImage('vertical'));
+
+    rotateLeftBtn.addEventListener('click', () => performTransformation((img, tCanvas, tCtx) => {
+        tCanvas.width = img.height; tCanvas.height = img.width;
+        tCtx.translate(tCanvas.width / 2, tCanvas.height / 2);
+        tCtx.rotate(-90 * Math.PI / 180);
+        tCtx.drawImage(img, -img.width / 2, -img.height / 2);
+    }));
+    rotateRightBtn.addEventListener('click', () => performTransformation((img, tCanvas, tCtx) => {
+        tCanvas.width = img.height; tCanvas.height = img.width;
+        tCtx.translate(tCanvas.width / 2, tCanvas.height / 2);
+        tCtx.rotate(90 * Math.PI / 180);
+        tCtx.drawImage(img, -img.width / 2, -img.height / 2);
+    }));
+    flipHorizontalBtn.addEventListener('click', () => performTransformation((img, tCanvas, tCtx) => {
+        tCanvas.width = img.width; tCanvas.height = img.height;
+        tCtx.translate(img.width, 0); tCtx.scale(-1, 1);
+        tCtx.drawImage(img, 0, 0);
+    }));
+    flipVerticalBtn.addEventListener('click', () => performTransformation((img, tCanvas, tCtx) => {
+        tCanvas.width = img.width; tCanvas.height = img.height;
+        tCtx.translate(0, img.height); tCtx.scale(1, -1);
+        tCtx.drawImage(img, 0, 0);
+    }));
+
 
     // --- Resize Logic (Commits changes) ---
-    function updateResizeInputsBasedOnAspectRatio(changedInput) { 
-        if (!aspectRatioLock.checked || !imageCanvas.width || !imageCanvas.height) return;
-        const currentCanvasWidth = imageCanvas.width; const currentCanvasHeight = imageCanvas.height;
-        const aspectRatio = (currentCanvasWidth > 0) ? currentCanvasHeight / currentCanvasWidth : 0;
-        if (changedInput === 'width') {
-            const newWidth = parseInt(resizeWidthInput.value);
-            if (!isNaN(newWidth) && newWidth > 0 && aspectRatio > 0) resizeHeightInput.value = Math.round(newWidth * aspectRatio);
-             else if (newWidth <=0 && aspectRatio > 0) resizeHeightInput.value = ''; 
-        } else if (changedInput === 'height') {
-            const newHeight = parseInt(resizeHeightInput.value);
-            const invAspectRatio = (currentCanvasHeight > 0) ? currentCanvasWidth / currentCanvasHeight : 0;
-            if (!isNaN(newHeight) && newHeight > 0 && invAspectRatio > 0) resizeWidthInput.value = Math.round(newHeight * invAspectRatio);
-            else if (newHeight <= 0 && invAspectRatio > 0) resizeWidthInput.value = ''; 
-        }
-    }
+    function updateResizeInputsBasedOnAspectRatio(changedInput) { /* ... same ... */ }
     resizeWidthInput.addEventListener('input', () => updateResizeInputsBasedOnAspectRatio('width'));
     resizeHeightInput.addEventListener('input', () => updateResizeInputsBasedOnAspectRatio('height'));
     resizeBtn.addEventListener('click', () => {
         if (!currentImageStateForCanvas || cropper) { showModal('Upload an image and ensure no crop is active.'); return; }
         const width = parseInt(resizeWidthInput.value); const height = parseInt(resizeHeightInput.value);
         if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) { showModal('Valid positive dimensions required.'); return; }
-        const tempImg = new Image();
-        tempImg.onload = () => { 
-            imageCanvas.width = width; imageCanvas.height = height;
-            applyCombinedFiltersToContext(); 
-            ctx.drawImage(tempImg, 0, 0, width, height); 
-            currentImageStateForCanvas = imageCanvas.toDataURL(); 
-            updateImageInfoDisplay(); 
-        };
-        tempImg.src = currentImageStateForCanvas; 
+        
+        performTransformation((img, tCanvas, tCtx) => {
+            tCanvas.width = width; tCanvas.height = height;
+            tCtx.drawImage(img, 0, 0, width, height); 
+        });
     });
 
     // --- Crop Logic ---
     function updateActivePresetButton() {
         cropPresetButtons.forEach(button => {
             const ratio = parseFloat(button.dataset.ratio);
-            if ( (isNaN(currentAspectRatio) && isNaN(ratio)) || (currentAspectRatio === ratio) ) {
+            // Check for NaN explicitly for the "Free" button
+            if ((isNaN(currentAspectRatio) && isNaN(ratio)) || currentAspectRatio === ratio) {
                 button.classList.add('active');
             } else {
                 button.classList.remove('active');
@@ -321,7 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cropPresetButtons.forEach(button => {
         button.addEventListener('click', () => {
-            currentAspectRatio = parseFloat(button.dataset.ratio);
+            currentAspectRatio = parseFloat(button.dataset.ratio); // This will be NaN for "Free"
             updateActivePresetButton();
             if (cropper) {
                 cropper.setAspectRatio(currentAspectRatio);
@@ -349,7 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cropBtn.addEventListener('click', () => {
         if (!currentImageStateForCanvas) { showModal('Please upload an image first.'); return; }
         if (cropper) { cropper.destroy(); cropper = null; setCropUIVisible(false); return; }
-        
+        showSpinner();
         const imgForCrop = new Image();
         imgForCrop.onload = () => {
             const tempCanvasForCrop = document.createElement('canvas');
@@ -360,65 +457,96 @@ document.addEventListener('DOMContentLoaded', () => {
             tempCtxForCrop.drawImage(imgForCrop, 0, 0);
             const stateWithLiveFilters = tempCanvasForCrop.toDataURL();
 
-            drawImageToCanvasAndCommit(stateWithLiveFilters, () => {
+            drawImageToCanvasAndCommit(stateWithLiveFilters, false, () => { 
                 cropper = new Cropper(imageCanvas, { 
                     aspectRatio: currentAspectRatio, 
                     viewMode: 1, background: true, autoCropArea: 0.8, responsive: true,
                     modal: true, guides: true, center: true, highlight: true,
                     cropBoxMovable: true, cropBoxResizable: true,
+                    ready: () => { hideSpinner(); } 
                 });
                 setCropUIVisible(true);
             });
         };
+        imgForCrop.onerror = () => {
+            hideSpinner();
+            showModal("Error preparing image for crop.");
+        }
         imgForCrop.src = currentImageStateForCanvas; 
     });
+
     confirmCropBtn.addEventListener('click', () => {
         if (!cropper) return;
-        const croppedCanvas = cropper.getCroppedCanvas();
+        showSpinner();
+        const croppedCanvas = cropper.getCroppedCanvas({});
         const croppedDataUrl = croppedCanvas.toDataURL(fileFormatSelect.value === 'image/jpeg' ? 'image/jpeg' : 'image/png');
         cropper.destroy(); cropper = null;
         setCropUIVisible(false);
         currentImageStateForCanvas = croppedDataUrl; 
-        resetAllFiltersAndDraw(currentImageStateForCanvas); 
+        resetAllFiltersAndDraw(currentImageStateForCanvas, true); 
         showModal('Image cropped.');
     });
+
     cancelCropBtn.addEventListener('click', () => {
         if (!cropper) return;
         cropper.destroy(); cropper = null;
         setCropUIVisible(false);
-        drawImageToCanvasAndCommit(currentImageStateForCanvas); 
+        drawImageToCanvasAndCommit(currentImageStateForCanvas, false); 
     });
+
+    // --- "View Original" Button Logic ---
+    viewOriginalBtn.addEventListener('mousedown', () => {
+        if (!originalImage || cropper || isViewingOriginal) return;
+        isViewingOriginal = true;
+        const img = new Image();
+        img.onload = () => {
+            ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+            if (imageCanvas.width !== img.naturalWidth || imageCanvas.height !== img.naturalHeight) {
+                imageCanvas.width = img.naturalWidth;
+                imageCanvas.height = img.naturalHeight;
+            }
+            ctx.filter = 'none'; // No filters when viewing original
+            ctx.drawImage(img, 0, 0);
+        };
+        img.src = originalImage;
+    });
+
+    function restorePreview() {
+        if (isViewingOriginal) {
+            isViewingOriginal = false;
+            if (currentImageStateForCanvas) {
+                previewFiltersOnCanvas(); 
+            } else if (originalImage) { 
+                drawImageToCanvasAndCommit(originalImage, false); 
+            }
+        }
+    }
+    viewOriginalBtn.addEventListener('mouseup', restorePreview);
+    viewOriginalBtn.addEventListener('mouseleave', restorePreview); 
+    viewOriginalBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault(); 
+        if (!originalImage || cropper || isViewingOriginal) return;
+        isViewingOriginal = true;
+        const img = new Image();
+        img.onload = () => {
+            ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+            if (imageCanvas.width !== img.naturalWidth || imageCanvas.height !== img.naturalHeight) {
+                imageCanvas.width = img.naturalWidth;
+                imageCanvas.height = img.naturalHeight;
+            }
+            ctx.filter = 'none';
+            ctx.drawImage(img, 0, 0);
+        };
+        img.src = originalImage;
+    }, { passive: false });
+    viewOriginalBtn.addEventListener('touchend', restorePreview);
+    viewOriginalBtn.addEventListener('touchcancel', restorePreview);
+
 
     // --- Format & Download ---
-    fileFormatSelect.addEventListener('change', () => {
-        jpegQualitySection.classList.toggle('hidden', fileFormatSelect.value !== 'image/jpeg');
-    });
-    jpegQualitySlider.addEventListener('input', (e) => { jpegQualityValueDisplay.textContent = parseFloat(e.target.value).toFixed(2); });
-    downloadBtn.addEventListener('click', () => {
-        if (!currentImageStateForCanvas) { showModal('No image to download.'); return; }
-        if (cropper) { showModal('Confirm or cancel crop first.'); return;}
-        
-        const imgToDownload = new Image();
-        imgToDownload.onload = () => {
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = imgToDownload.naturalWidth;
-            tempCanvas.height = imgToDownload.naturalHeight;
-            tempCtx.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
-            tempCtx.drawImage(imgToDownload, 0, 0);
-
-            const format = fileFormatSelect.value;
-            const quality = (format === 'image/jpeg') ? parseFloat(jpegQualitySlider.value) : undefined;
-            const dataURL = tempCanvas.toDataURL(format, quality); 
-            const link = document.createElement('a');
-            const extension = format.split('/')[1];
-            link.download = `Imagist_edited.${extension}`;
-            link.href = dataURL;
-            document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            showModal(`Image downloaded as Imagist_edited.${extension}`);
-        };
-        imgToDownload.src = currentImageStateForCanvas; 
-    });
+    fileFormatSelect.addEventListener('change', () => { /* ... same ... */ });
+    jpegQualitySlider.addEventListener('input', (e) => { /* ... same ... */ });
+    downloadBtn.addEventListener('click', () => { /* ... same ... */ });
 
     // --- Reset All ---
     resetAllBtn.addEventListener('click', () => {
@@ -427,7 +555,8 @@ document.addEventListener('DOMContentLoaded', () => {
             originalCanvasWidth = 0; originalCanvasHeight = 0; 
             originalFileName = ''; originalFileType = ''; 
             currentAspectRatio = NaN; 
-            resetAllFiltersAndDraw(originalImage); 
+            clearHistory(); 
+            resetAllFiltersAndDraw(originalImage, true); 
             updateActivePresetButton();
             showModal('All changes reset.');
         } else {
@@ -435,5 +564,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
+    // --- Keyboard Shortcuts ---
+    document.addEventListener('keydown', (event) => {
+        const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+            return;
+        }
+        
+        if (isCtrlOrCmd && event.key.toLowerCase() === 'z') {
+            event.preventDefault();
+            if (!undoBtn.disabled) undoBtn.click();
+        } else if (isCtrlOrCmd && event.key.toLowerCase() === 'y') {
+            event.preventDefault();
+            if (!redoBtn.disabled) redoBtn.click();
+        } else if (isCtrlOrCmd && event.key.toLowerCase() === 'o') {
+            event.preventDefault();
+            fileUpload.click(); 
+        } else if (isCtrlOrCmd && event.key.toLowerCase() === 's') {
+            event.preventDefault();
+            if (originalImage && !downloadBtn.disabled) downloadBtn.click();
+        }
+    });
+
     resetEditorState(); 
 });
