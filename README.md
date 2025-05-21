@@ -66,5 +66,5 @@ This project is ideal for users who need quick edits without the complexity of p
 A project by **Geetartha Sarma**
 * Instagram: [https://www.instagram.com/geetartha.sarma/](https://www.instagram.com/geetartha.sarma/)
 * X (Twitter): [https://x.com/geetartha373](https://x.com/geetartha373)
-* GitHub: [https://github.com/vladanila/vladanila.github.io](https://github.com/vladanila/vladanila.github.io)
+* GitHub: [https://github.com/vladanila/vladanila.github.io](https://github.com/vladanila)
 
