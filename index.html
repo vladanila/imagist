@@ -142,8 +142,7 @@
             <div class="md:col-span-2">
                 <div id="image-preview-container" class="w-full h-64 md:h-[500px] flex items-center justify-center rounded-lg p-2 relative">
                     <canvas id="image-canvas"></canvas>
-                    <p id="image-placeholder" class="text-center" style="color: var(--text-secondary);">Image preview will appear here</p>
-                    <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center bg-opacity-50 hidden" style="background-color: var(--background-secondary_alpha_50, rgba(245,245,247,0.5));">
+                    <p id="image-placeholder" class="text-center" style="color: var(--text-secondary);">Drag & drop an image here, or click 'Choose File' above.</p> <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center bg-opacity-50 hidden" style="background-color: var(--background-secondary_alpha_50, rgba(245,245,247,0.5));">
                         <div class="spinner"></div>
                     </div>
                 </div>
@@ -176,7 +175,8 @@
                     </div>
                 </div>
                  <div id="history-controls" class="mt-4 text-center md:text-right space-x-2 hidden">
-                    <button id="view-original-btn" class="btn">View Original</button> <button id="undo-btn" class="btn">Undo</button>
+                    <button id="view-original-btn" class="btn">View Original</button> 
+                    <button id="undo-btn" class="btn">Undo</button>
                     <button id="redo-btn" class="btn">Redo</button>
                     <button id="reset-all-btn" class="btn">Reset All Changes</button>
                 </div>
@@ -187,7 +187,7 @@
     <div id="modal" class="modal-overlay">
         <div class="modal-content">
             <p id="modal-message">This is a message!</p>
-            <button id="modal-close-btn" class="btn btn-primary">OK</button>
+            <div class="mt-6 flex justify-end space-x-3"> <button id="modal-cancel-btn" class="btn hidden">Cancel</button> <button id="modal-confirm-btn" class="btn btn-primary">OK</button> </div>
         </div>
     </div>
     
