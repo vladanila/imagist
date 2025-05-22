@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const MAX_HISTORY_STATES = 20; 
 
     // --- UI Elements ---
+    const editFileNameInput = document.getElementById('edit-file-name');
     const cropBtn = document.getElementById('crop-btn');
     const cropActionsDiv = document.getElementById('crop-actions');
     const confirmCropBtn = document.getElementById('confirm-crop-btn');
@@ -116,7 +117,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('download-tool-section')
     ];
     const imageInfoDisplayDiv = document.getElementById('image-info-display');
-    const infoFileName = document.getElementById('info-file-name');
     const infoOriginalDims = document.getElementById('info-original-dims');
     const infoCurrentDims = document.getElementById('info-current-dims');
     const infoFileType = document.getElementById('info-file-type');
@@ -163,9 +163,6 @@ document.addEventListener('DOMContentLoaded', () => {
             imageCanvas.width = img.naturalWidth;
             imageCanvas.height = img.naturalHeight;
             ctx.clearRect(0,0, imageCanvas.width, imageCanvas.height);
-            // The loaded state already has filters baked in. We need to extract
-            // filter values if we want to update sliders, which is complex.
-            // For now, just draw the image. Sliders won't reflect undone filter values.
             ctx.drawImage(img, 0, 0);
             
             resizeWidthInput.value = imageCanvas.width;
@@ -197,9 +194,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateImageInfoDisplay() {
         if (!originalImage) { 
             imageInfoDisplayDiv.classList.add('hidden');
+            editFileNameInput.value = ''; 
+            editFileNameInput.disabled = true;
             return;
         }
-        infoFileName.textContent = originalFileName || '-';
+        if (editFileNameInput.value === '' || editFileNameInput.value === 'Imagist_edited' || editFileNameInput.value === 'edited_image') {
+            const nameWithoutExtension = originalFileName.substring(0, originalFileName.lastIndexOf('.')) || originalFileName;
+            editFileNameInput.value = nameWithoutExtension || 'edited_image';
+        }
+        editFileNameInput.disabled = false;
+
         infoOriginalDims.textContent = (originalCanvasWidth && originalCanvasHeight) ? `${originalCanvasWidth} x ${originalCanvasHeight} px` : '-';
         infoCurrentDims.textContent = (imageCanvas.width && imageCanvas.height) ? `${imageCanvas.width} x ${imageCanvas.height} px` : '-';
         infoFileType.textContent = originalFileType ? originalFileType.toUpperCase().replace('IMAGE/', '') : '-';
@@ -219,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             imageCanvas.width = img.naturalWidth;
             imageCanvas.height = img.naturalHeight;
-            applyCombinedFiltersToContext(); // Apply current filter values
+            applyCombinedFiltersToContext(); 
             ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
             currentImageStateForCanvas = imageCanvas.toDataURL(); 
             
@@ -254,17 +258,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!currentImageStateForCanvas || cropper || isViewingOriginal) return; 
         const img = new Image();
         img.onload = () => {
-            // The canvas dimensions should match the currentImageStateForCanvas's natural dimensions
             if (imageCanvas.width !== img.naturalWidth || imageCanvas.height !== img.naturalHeight) {
                 imageCanvas.width = img.naturalWidth;
                 imageCanvas.height = img.naturalHeight;
             }
             ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
-            applyCombinedFiltersToContext(); // Applies currentFilters from the global object
+            applyCombinedFiltersToContext(); 
             ctx.drawImage(img, 0, 0, imageCanvas.width, imageCanvas.height);
         };
         img.onerror = () => console.error("Error loading image for filter preview.");
-        img.src = currentImageStateForCanvas; // Use the last committed state as base for preview
+        img.src = currentImageStateForCanvas; 
     }
     
     // --- File Upload & Drag/Drop ---
@@ -286,6 +289,10 @@ document.addEventListener('DOMContentLoaded', () => {
             originalImage = e.target.result; 
             currentImageStateForCanvas = originalImage; 
             originalCanvasWidth = 0; originalCanvasHeight = 0; 
+            
+            const nameWithoutExtension = originalFileName.substring(0, originalFileName.lastIndexOf('.')) || originalFileName;
+            editFileNameInput.value = nameWithoutExtension || 'edited_image';
+
             resetAllFiltersAndDraw(currentImageStateForCanvas, true); 
             currentAspectRatio = NaN;
             updateActivePresetButton();
@@ -318,6 +325,8 @@ document.addEventListener('DOMContentLoaded', () => {
         toolsContainer.classList.add('hidden'); 
         historyControlsDiv.classList.add('hidden'); 
         imageInfoDisplayDiv.classList.add('hidden'); 
+        editFileNameInput.value = ''; 
+        editFileNameInput.disabled = true; 
         hideSpinner(); 
         fileUpload.value = '';
         resetFilterControlsToDefaults();
@@ -337,7 +346,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     brightnessSlider.addEventListener('change', () => { 
         if (cropper || !currentImageStateForCanvas) return;
-        // Commit the current state (which is the base) with the new brightness/contrast
         drawImageToCanvasAndCommit(currentImageStateForCanvas);
     });
     contrastSlider.addEventListener('input', (e) => { 
@@ -358,13 +366,15 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const wasActive = currentFilters[type] === 100;
 
-            // Reset other discrete filters
+            // Reset all discrete filter values (grayscale, sepia, invert)
             currentFilters.grayscale = 0;
             currentFilters.sepia = 0;
             currentFilters.invert = 0;
 
+            // If the clicked filter was not previously active, activate it.
+            // If it was active, clicking it again means it's now off (due to the reset above).
             if (!wasActive) {
-                currentFilters[type] = 100; // Activate the clicked one
+                currentFilters[type] = 100;
             }
             // Brightness and contrast remain as they are in currentFilters object
             
@@ -375,7 +385,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('filter-none').addEventListener('click', () => {
         if (cropper) return;
-        resetFilterControlsToDefaults(); // This sets all filter values in currentFilters to default
+        // This will reset brightness/contrast to 100 and discrete filters to 0
+        resetFilterControlsToDefaults(); 
         // Redraw using the current base image state, applying the now default filters
         drawImageToCanvasAndCommit(currentImageStateForCanvas); 
     });
@@ -396,45 +407,26 @@ document.addEventListener('DOMContentLoaded', () => {
         showSpinner();
         const imgForTransform = new Image();
         imgForTransform.onload = () => {
-            // Create a temporary canvas to apply current filters to the base image first
-            const tempCanvasFiltered = document.createElement('canvas');
-            const tempCtxFiltered = tempCanvasFiltered.getContext('2d');
-            tempCanvasFiltered.width = imgForTransform.naturalWidth;
-            tempCanvasFiltered.height = imgForTransform.naturalHeight;
-            // Apply current global filters (brightness, contrast, and any active discrete one)
-            tempCtxFiltered.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
-            tempCtxFiltered.drawImage(imgForTransform, 0, 0);
-            const stateWithCurrentFilters = tempCanvasFiltered.toDataURL();
+            const tempCanvasForTransform = document.createElement('canvas');
+            const tempCtxForTransform = tempCanvasForTransform.getContext('2d');
+            tempCanvasForTransform.width = imgForTransform.naturalWidth;
+            tempCanvasForTransform.height = imgForTransform.naturalHeight;
+            tempCtxForTransform.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
+            tempCtxForTransform.drawImage(imgForTransform, 0, 0);
+            const stateWithLiveFilters = tempCanvasForTransform.toDataURL();
             
-            // Now perform the geometric transformation on this filtered state
             const finalTransformImg = new Image();
             finalTransformImg.onload = () => {
                 const transformedCanvas = document.createElement('canvas');
                 const transformedCtx = transformedCanvas.getContext('2d');
-                transformationFn(finalTransformImg, transformedCanvas, transformedCtx); // Apply the specific geometric transform
+                transformationFn(finalTransformImg, transformedCanvas, transformedCtx); 
                 const newDataURL = transformedCanvas.toDataURL();
-                // The newDataURL now has the geometric transform and the filters from before the transform.
-                // We commit this directly. drawImageToCanvasAndCommit will NOT re-apply filters if we draw this dataURL.
-                // It will just save it. This is correct.
-                currentImageStateForCanvas = newDataURL; // Update the base state
-                saveStateToHistory(currentImageStateForCanvas); // Save the new transformed (and filtered) state
-                
-                // Manually redraw to canvas for display (as drawImageToCanvasAndCommit was bypassed for direct state update)
-                const displayImg = new Image();
-                displayImg.onload = () => {
-                    imageCanvas.width = displayImg.naturalWidth;
-                    imageCanvas.height = displayImg.naturalHeight;
-                    ctx.clearRect(0,0,imageCanvas.width, imageCanvas.height);
-                    ctx.drawImage(displayImg,0,0);
-                    updateImageInfoDisplay();
-                    updateUndoRedoButtons();
-                    hideSpinner();
-                }
-                displayImg.src = currentImageStateForCanvas;
+                drawImageToCanvasAndCommit(newDataURL); 
+                updateImageInfoDisplay();
             };
-            finalTransformImg.src = stateWithCurrentFilters;
+            finalTransformImg.src = stateWithLiveFilters;
         };
-        imgForTransform.src = currentImageStateForCanvas; // Base is the last committed state
+        imgForTransform.src = currentImageStateForCanvas; 
     }
 
     rotateLeftBtn.addEventListener('click', () => performTransformation((img, tCanvas, tCtx) => {
@@ -470,7 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const width = parseInt(resizeWidthInput.value); const height = parseInt(resizeHeightInput.value);
         if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) { showModal('Valid positive dimensions required.'); return; }
         
-        performTransformation((img, tCanvas, tCtx) => { // Use performTransformation to handle filters correctly
+        performTransformation((img, tCanvas, tCtx) => {
             tCanvas.width = width; tCanvas.height = height;
             tCtx.drawImage(img, 0, 0, width, height); 
         });
@@ -517,37 +509,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     cropBtn.addEventListener('click', () => {
         if (!currentImageStateForCanvas) { showModal('Please upload an image first.'); return; }
-        if (cropper) { cropper.destroy(); cropper = null; setCropUIVisible(false); return; }
+        if (cropper) { // If cropper is already active, destroy it and reset UI
+            cropper.destroy(); 
+            cropper = null; 
+            setCropUIVisible(false); 
+            return; 
+        }
         showSpinner();
         const imgForCrop = new Image();
         imgForCrop.onload = () => {
-            // Create a temporary canvas to bake in current filters before initializing cropper
             const tempCanvasForCrop = document.createElement('canvas');
             const tempCtxForCrop = tempCanvasForCrop.getContext('2d');
             tempCanvasForCrop.width = imgForCrop.naturalWidth;
             tempCanvasForCrop.height = imgForCrop.naturalHeight;
-            // Apply the current global filters
             tempCtxForCrop.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
             tempCtxForCrop.drawImage(imgForCrop, 0, 0);
             const stateWithLiveFilters = tempCanvasForCrop.toDataURL();
 
-            // Draw this fully filtered state to the main canvas for Cropper, but DON'T save to history yet.
+            // Draw the (potentially filtered) image to the main canvas.
+            // This does NOT save to history yet, as the crop hasn't been confirmed.
+            // The callback will initialize Cropper.js.
             drawImageToCanvasAndCommit(stateWithLiveFilters, false, () => { 
                 cropper = new Cropper(imageCanvas, { 
                     aspectRatio: currentAspectRatio, 
                     viewMode: 1, background: true, autoCropArea: 0.8, responsive: true,
                     modal: true, guides: true, center: true, highlight: true,
                     cropBoxMovable: true, cropBoxResizable: true,
-                    ready: () => { hideSpinner(); } 
+                    ready: () => { 
+                        hideSpinner(); 
+                        setCropUIVisible(true); // Show confirm/cancel buttons now that cropper is ready
+                    } 
                 });
-                setCropUIVisible(true);
+                // setCropUIVisible(true); // Moved to cropper.ready to ensure UI updates after cropper init
             });
         };
         imgForCrop.onerror = () => {
             hideSpinner();
             showModal("Error preparing image for crop.");
         }
-        imgForCrop.src = currentImageStateForCanvas; // Base is the last committed state
+        imgForCrop.src = currentImageStateForCanvas; 
     });
 
     confirmCropBtn.addEventListener('click', () => {
@@ -558,8 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cropper.destroy(); cropper = null;
         setCropUIVisible(false);
         currentImageStateForCanvas = croppedDataUrl; 
-        // After crop, the filters are effectively part of the new base image.
-        // We should reset currentFilters object and then save this new base to history.
+        // After crop, filters are part of the new base image. Reset currentFilters object.
         resetAllFiltersAndDraw(currentImageStateForCanvas, true); 
         showModal('Image cropped.');
     });
@@ -568,8 +567,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!cropper) return;
         cropper.destroy(); cropper = null;
         setCropUIVisible(false);
-        // Redraw the state from before cropping started (which was currentImageStateForCanvas)
-        // This state already includes any filters that were applied before crop was initiated.
+        // Redraw the state from before cropping started. This state already has its filters baked in.
+        // Don't save to history as we are canceling.
         drawImageToCanvasAndCommit(currentImageStateForCanvas, false); 
     });
 
@@ -639,44 +638,34 @@ document.addEventListener('DOMContentLoaded', () => {
         imgToDownload.onload = () => {
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
-            // The image to download should have the dimensions of the current canvas state
-            tempCanvas.width = imageCanvas.width; 
-            tempCanvas.height = imageCanvas.height; 
+            tempCanvas.width = imgToDownload.naturalWidth; 
+            tempCanvas.height = imgToDownload.naturalHeight; 
             
-            // Apply the final set of filters from currentFilters to the current base image
-            // currentImageStateForCanvas is the base (could be cropped, resized, rotated)
-            const baseImageForDownload = new Image();
-            baseImageForDownload.onload = () => {
-                tempCtx.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
-                tempCtx.drawImage(baseImageForDownload, 0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
+            tempCtx.drawImage(imgToDownload, 0, 0, tempCanvas.width, tempCanvas.height);
 
-                const format = fileFormatSelect.value;
-                const quality = (format === 'image/jpeg') ? parseFloat(jpegQualitySlider.value) : undefined;
-                const dataURL = tempCanvas.toDataURL(format, quality); 
-                const link = document.createElement('a');
-                const extension = format.split('/')[1];
-                link.download = `Imagist_edited.${extension}`;
-                link.href = dataURL;
-                document.body.appendChild(link); 
-                link.click(); 
-                document.body.removeChild(link);
-                hideSpinner(); 
-                showModal(`Image downloaded as Imagist_edited.${extension}`);
-            };
-            baseImageForDownload.onerror = () => {
-                hideSpinner();
-                showModal("Error preparing base image for download.");
-            }
-            baseImageForDownload.src = currentImageStateForCanvas; // This is the last committed state
+            const format = fileFormatSelect.value;
+            const quality = (format === 'image/jpeg') ? parseFloat(jpegQualitySlider.value) : undefined;
+            const dataURL = tempCanvas.toDataURL(format, quality); 
+            const link = document.createElement('a');
+            
+            let userFileName = editFileNameInput.value.trim() || 'Imagist_edited';
+            userFileName = userFileName.replace(/[<>:"/\\|?*]+/g, '_'); 
+            
+            const extension = format.split('/')[1];
+            link.download = `${userFileName}.${extension}`;
+            link.href = dataURL;
+            document.body.appendChild(link); 
+            link.click(); 
+            document.body.removeChild(link);
+            hideSpinner(); 
+            showModal(`Image downloaded as ${link.download}`);
         };
-        // This initial load of imgToDownload is just to get its natural dimensions
-        // if needed, but we're using imageCanvas.width/height for the tempCanvas.
-        // The actual drawing happens with baseImageForDownload.
-        imgToDownload.src = currentImageStateForCanvas; 
-         imgToDownload.onerror = () => { // Add error handling for the outer image load too
+        imgToDownload.onerror = () => {
             hideSpinner();
-            showModal("Error loading image for download process.");
+            showModal("Error preparing image for download.");
         }
+        imgToDownload.src = currentImageStateForCanvas; 
     });
 
     // --- Reset All ---
@@ -688,7 +677,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (originalImage) {
                     currentImageStateForCanvas = originalImage; 
                     originalCanvasWidth = 0; originalCanvasHeight = 0; 
-                    originalFileName = ''; originalFileType = ''; 
+                    const nameWithoutExtension = originalFileName.substring(0, originalFileName.lastIndexOf('.')) || originalFileName;
+                    editFileNameInput.value = nameWithoutExtension || 'edited_image';
+
                     currentAspectRatio = NaN; 
                     clearHistory(); 
                     resetAllFiltersAndDraw(originalImage, true); 
@@ -705,10 +696,15 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', (event) => {
         const isCtrlOrCmd = event.ctrlKey || event.metaKey;
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+            if (event.key === 'Escape' && modal.classList.contains('active')) {
+                closeModal();
+            }
             return;
         }
         
-        if (isCtrlOrCmd && event.key.toLowerCase() === 'z') {
+        if (event.key === 'Escape' && modal.classList.contains('active')) {
+            closeModal();
+        } else if (isCtrlOrCmd && event.key.toLowerCase() === 'z') {
             event.preventDefault();
             if (!undoBtn.disabled) undoBtn.click();
         } else if (isCtrlOrCmd && event.key.toLowerCase() === 'y') {
@@ -725,3 +721,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
     resetEditorState(); 
 });
+s
