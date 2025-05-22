@@ -142,12 +142,15 @@
             <div class="md:col-span-2">
                 <div id="image-preview-container" class="w-full h-64 md:h-[500px] flex items-center justify-center rounded-lg p-2 relative">
                     <canvas id="image-canvas"></canvas>
-                    <p id="image-placeholder" class="text-center" style="color: var(--text-secondary);">Drag & drop an image here, or click 'Choose File' above.</p> <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center bg-opacity-50 hidden" style="background-color: var(--background-secondary_alpha_50, rgba(245,245,247,0.5));">
+                    <p id="image-placeholder" class="text-center" style="color: var(--text-secondary);">Drag & drop an image here, or click 'Choose File' above.</p>
+                    <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center bg-opacity-50 hidden" style="background-color: var(--background-secondary_alpha_50, rgba(245,245,247,0.5));">
                         <div class="spinner"></div>
                     </div>
                 </div>
                 <div id="image-info-display" class="hidden">
-                    <p><strong>File Name:</strong> <span id="info-file-name">-</span></p>
+                    <div class="flex items-center mb-2"> <strong class="mr-2">File Name:</strong> 
+                        <input type="text" id="edit-file-name" class="input-field flex-grow text-sm" placeholder="Enter file name">
+                    </div>
                     <p><strong>Original Dimensions:</strong> <span id="info-original-dims">-</span></p>
                     <p><strong>Current Dimensions:</strong> <span id="info-current-dims">-</span></p>
                     <div class="flex justify-between items-center info-line-flex">
@@ -187,7 +190,10 @@
     <div id="modal" class="modal-overlay">
         <div class="modal-content">
             <p id="modal-message">This is a message!</p>
-            <div class="mt-6 flex justify-end space-x-3"> <button id="modal-cancel-btn" class="btn hidden">Cancel</button> <button id="modal-confirm-btn" class="btn btn-primary">OK</button> </div>
+            <div class="mt-6 flex justify-end space-x-3"> 
+                <button id="modal-cancel-btn" class="btn hidden">Cancel</button> 
+                <button id="modal-confirm-btn" class="btn btn-primary">OK</button> 
+            </div>
         </div>
     </div>
     
