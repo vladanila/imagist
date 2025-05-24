@@ -71,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isViewingOriginal = false; 
 
     let currentFilters = { brightness: 100, contrast: 100, grayscale: 0, sepia: 0, invert: 0 };
+    let textObjects = []; 
 
     // --- History for Undo/Redo ---
     let historyStack = [];
@@ -109,10 +110,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const undoBtn = document.getElementById('undo-btn');
     const redoBtn = document.getElementById('redo-btn');
     const resetAllBtn = document.getElementById('reset-all-btn');
+
+    const textInput = document.getElementById('text-input');
+    const fontFamilySelect = document.getElementById('font-family-select');
+    const fontSizeInput = document.getElementById('font-size-input');
+    const fontColorInput = document.getElementById('font-color-input');
+    const addTextBtn = document.getElementById('add-text-btn');
+    const clearAllTextBtn = document.getElementById('clear-all-text-btn');
     
     const toolSectionElements = [ 
+        document.getElementById('crop-tool-section'), 
         document.getElementById('transform-tool-section'),
         document.getElementById('filters-tool-section'),
+        document.getElementById('text-tool-section'), 
         document.getElementById('resize-tool-section'),
         document.getElementById('download-tool-section')
     ];
@@ -134,7 +144,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (historyPointer < historyStack.length - 1) {
             historyStack = historyStack.slice(0, historyPointer + 1);
         }
-        historyStack.push(stateDataURL);
+        historyStack.push({
+            imageData: stateDataURL,
+            texts: JSON.parse(JSON.stringify(textObjects)),
+            filters: JSON.parse(JSON.stringify(currentFilters)) 
+        });
         historyPointer++;
         if (historyStack.length > MAX_HISTORY_STATES) {
             historyStack.shift(); 
@@ -144,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateUndoRedoButtons() {
-        undoBtn.disabled = historyPointer <= 0;
+        undoBtn.disabled = historyPointer <= 0; 
         redoBtn.disabled = historyPointer >= historyStack.length - 1;
         viewOriginalBtn.disabled = !originalImage; 
         historyControlsDiv.classList.toggle('hidden', !originalImage ); 
@@ -156,25 +170,37 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUndoRedoButtons();
     }
 
-    function loadStateFromHistory(stateDataURL) {
-        currentImageStateForCanvas = stateDataURL; 
+    function loadStateFromHistory(historyEntry) {
+        currentImageStateForCanvas = historyEntry.imageData; 
+        textObjects = JSON.parse(JSON.stringify(historyEntry.texts)); 
+        currentFilters = JSON.parse(JSON.stringify(historyEntry.filters)); 
+
+        brightnessSlider.value = currentFilters.brightness;
+        brightnessValueDisplay.textContent = currentFilters.brightness;
+        contrastSlider.value = currentFilters.contrast;
+        contrastValueDisplay.textContent = currentFilters.contrast;
+
         const img = new Image();
         img.onload = () => {
             imageCanvas.width = img.naturalWidth;
             imageCanvas.height = img.naturalHeight;
             ctx.clearRect(0,0, imageCanvas.width, imageCanvas.height);
+            // The history state's imageData already has its specific filters baked in.
+            // We don't re-apply global currentFilters here, but draw the image as is.
+            // Then draw the text objects associated with that history state.
             ctx.drawImage(img, 0, 0);
+            drawAllText(); // Draw the restored text objects
             
             resizeWidthInput.value = imageCanvas.width;
             resizeHeightInput.value = imageCanvas.height;
             updateImageInfoDisplay();
         };
         img.onerror = () => showModal("Error loading history state.");
-        img.src = stateDataURL;
+        img.src = currentImageStateForCanvas; 
     }
 
     undoBtn.addEventListener('click', () => {
-        if (historyPointer > 0) {
+        if (historyPointer > 0) { 
             historyPointer--;
             loadStateFromHistory(historyStack[historyPointer]);
             updateUndoRedoButtons();
@@ -205,13 +231,29 @@ document.addEventListener('DOMContentLoaded', () => {
         editFileNameInput.disabled = false;
 
         infoOriginalDims.textContent = (originalCanvasWidth && originalCanvasHeight) ? `${originalCanvasWidth} x ${originalCanvasHeight} px` : '-';
-        infoCurrentDims.textContent = (imageCanvas.width && imageCanvas.height) ? `${imageCanvas.width} x ${imageCanvas.height} px` : '-';
+        infoCurrentDims.textContent = (imageCanvas.width && imageCanvas.height) ? `${Math.round(imageCanvas.width)} x ${Math.round(imageCanvas.height)} px` : '-';
         infoFileType.textContent = originalFileType ? originalFileType.toUpperCase().replace('IMAGE/', '') : '-';
         imageInfoDisplayDiv.classList.remove('hidden');
     }
 
-
+    // --- Text Rendering ---
+    function drawAllText() {
+        if (isViewingOriginal) return; 
+        textObjects.forEach(textObj => {
+            ctx.font = `${textObj.size}px ${textObj.fontFamily}`; 
+            ctx.fillStyle = textObj.color;
+            ctx.textAlign = 'left'; 
+            ctx.textBaseline = 'top'; 
+            const lines = textObj.text.split('\n');
+            lines.forEach((line, index) => {
+                ctx.fillText(line, textObj.x, textObj.y + (index * textObj.size * 1.2)); 
+            });
+        });
+    }
+    
     // --- Main image drawing function (Commits state AND saves to history) ---
+    // This function is responsible for drawing the sourceDataUrl (which should be a base image state)
+    // onto the canvas, applying current global filters and text, then saving the result.
     function drawImageToCanvasAndCommit(sourceDataUrl, shouldSaveToHistory = true, callback) {
         showSpinner(); 
         if (cropper) { cropper.destroy(); cropper = null; setCropUIVisible(false); }
@@ -223,12 +265,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             imageCanvas.width = img.naturalWidth;
             imageCanvas.height = img.naturalHeight;
-            applyCombinedFiltersToContext(); 
-            ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
-            currentImageStateForCanvas = imageCanvas.toDataURL(); 
+            
+            applyCombinedFiltersToContext(); // Apply current filter values
+            ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight); // Draw the base image
+            drawAllText(); // Draw text on top
+            
+            const committedStateDataURL = imageCanvas.toDataURL();
+            currentImageStateForCanvas = committedStateDataURL; // This is now the new base state
             
             if (shouldSaveToHistory) {
-                saveStateToHistory(currentImageStateForCanvas);
+                saveStateToHistory(committedStateDataURL);
             }
             
             imagePlaceholder.style.display = 'none'; imageCanvas.style.display = 'block';
@@ -250,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
             hideSpinner(); 
             resetEditorState(); 
         };
-        img.src = sourceDataUrl;
+        img.src = sourceDataUrl; // sourceDataUrl is typically currentImageStateForCanvas or originalImage
     }
 
     // --- Preview function for non-committing filter changes (e.g., sliders) ---
@@ -263,11 +309,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 imageCanvas.height = img.naturalHeight;
             }
             ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
-            applyCombinedFiltersToContext(); 
-            ctx.drawImage(img, 0, 0, imageCanvas.width, imageCanvas.height);
+            applyCombinedFiltersToContext(); // Applies currentFilters from the global object
+            ctx.drawImage(img, 0, 0, imageCanvas.width, imageCanvas.height); // Draw base image
+            drawAllText(); // Draw text on top
         };
         img.onerror = () => console.error("Error loading image for filter preview.");
-        img.src = currentImageStateForCanvas; 
+        img.src = currentImageStateForCanvas; // Use the last committed state as base for preview
     }
     
     // --- File Upload & Drag/Drop ---
@@ -279,6 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
         originalFileName = file.name; 
         originalFileType = file.type; 
         clearHistory(); 
+        textObjects = []; 
         showSpinner(); 
 
         const reader = new FileReader();
@@ -316,6 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
         originalCanvasWidth = 0; originalCanvasHeight = 0;
         originalFileName = ''; originalFileType = '';
         currentAspectRatio = NaN; 
+        textObjects = []; 
         clearHistory(); 
         ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
         imageCanvas.width = 0; imageCanvas.height = 0; 
@@ -339,52 +388,49 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
     }
     brightnessSlider.addEventListener('input', (e) => { 
-        if (cropper) return;
+        if (cropper || isViewingOriginal) return;
         currentFilters.brightness = e.target.value; 
         brightnessValueDisplay.textContent = e.target.value;
         previewFiltersOnCanvas(); 
     });
     brightnessSlider.addEventListener('change', () => { 
-        if (cropper || !currentImageStateForCanvas) return;
+        if (cropper || !currentImageStateForCanvas || isViewingOriginal) return;
         drawImageToCanvasAndCommit(currentImageStateForCanvas);
     });
     contrastSlider.addEventListener('input', (e) => { 
-        if (cropper) return;
+        if (cropper || isViewingOriginal) return;
         currentFilters.contrast = e.target.value; 
         contrastValueDisplay.textContent = e.target.value;
         previewFiltersOnCanvas(); 
     });
     contrastSlider.addEventListener('change', () => { 
-        if (cropper || !currentImageStateForCanvas) return;
+        if (cropper || !currentImageStateForCanvas || isViewingOriginal) return;
         drawImageToCanvasAndCommit(currentImageStateForCanvas);
     });
 
     // Corrected logic for discrete filters to be exclusive
     ['grayscale', 'sepia', 'invert'].forEach(type => {
         document.getElementById(`filter-${type}`).addEventListener('click', () => {
-            if (cropper) return; 
+            if (cropper || isViewingOriginal) return; 
             
             const wasActive = currentFilters[type] === 100;
 
             // Reset all discrete filter values (grayscale, sepia, invert)
+            // Brightness and contrast are preserved.
             currentFilters.grayscale = 0;
             currentFilters.sepia = 0;
             currentFilters.invert = 0;
 
-            // If the clicked filter was not previously active, activate it.
-            // If it was active, clicking it again means it's now off (due to the reset above).
             if (!wasActive) {
-                currentFilters[type] = 100;
+                currentFilters[type] = 100; // Activate the clicked one
             }
-            // Brightness and contrast remain as they are in currentFilters object
-            
             // Redraw using the current base image state, applying the newly set filters
             drawImageToCanvasAndCommit(currentImageStateForCanvas); 
         });
     });
 
     document.getElementById('filter-none').addEventListener('click', () => {
-        if (cropper) return;
+        if (cropper || isViewingOriginal) return;
         // This will reset brightness/contrast to 100 and discrete filters to 0
         resetFilterControlsToDefaults(); 
         // Redraw using the current base image state, applying the now default filters
@@ -401,9 +447,41 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sourceDataUrl) drawImageToCanvasAndCommit(sourceDataUrl, saveToHistory, callback);
     }
 
+    // --- Text Tool Logic ---
+    addTextBtn.addEventListener('click', () => {
+        if (!currentImageStateForCanvas || cropper || isViewingOriginal) {
+            showModal("Please load an image and ensure no crop or view original is active.");
+            return;
+        }
+        const text = textInput.value.trim();
+        if (!text) {
+            showModal("Please enter some text.");
+            return;
+        }
+        const newTextObject = {
+            text: text,
+            x: 50, 
+            y: 50, 
+            fontFamily: fontFamilySelect.value,
+            size: parseInt(fontSizeInput.value) || 30,
+            color: fontColorInput.value
+        };
+        textObjects.push(newTextObject);
+        textInput.value = ''; 
+        drawImageToCanvasAndCommit(currentImageStateForCanvas); 
+    });
+
+    clearAllTextBtn.addEventListener('click', () => {
+        if (textObjects.length === 0) { showModal("No text to clear."); return; }
+        if (isViewingOriginal) return;
+        textObjects = []; 
+        drawImageToCanvasAndCommit(currentImageStateForCanvas); 
+        showModal("All text cleared.");
+    });
+
     // --- Transform Logic (Commits changes) ---
     function performTransformation(transformationFn) {
-        if (!currentImageStateForCanvas || cropper) return;
+        if (!currentImageStateForCanvas || cropper || isViewingOriginal) return;
         showSpinner();
         const imgForTransform = new Image();
         imgForTransform.onload = () => {
@@ -413,7 +491,17 @@ document.addEventListener('DOMContentLoaded', () => {
             tempCanvasForTransform.height = imgForTransform.naturalHeight;
             tempCtxForTransform.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
             tempCtxForTransform.drawImage(imgForTransform, 0, 0);
-            const stateWithLiveFilters = tempCanvasForTransform.toDataURL();
+            textObjects.forEach(textObj => { 
+                tempCtxForTransform.font = `${textObj.size}px ${textObj.fontFamily}`;
+                tempCtxForTransform.fillStyle = textObj.color;
+                tempCtxForTransform.textAlign = 'left';
+                tempCtxForTransform.textBaseline = 'top';
+                const lines = textObj.text.split('\n');
+                lines.forEach((line, index) => {
+                    tempCtxForTransform.fillText(line, textObj.x, textObj.y + (index * textObj.size * 1.2));
+                });
+            });
+            const stateWithAllEffects = tempCanvasForTransform.toDataURL();
             
             const finalTransformImg = new Image();
             finalTransformImg.onload = () => {
@@ -421,10 +509,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 const transformedCtx = transformedCanvas.getContext('2d');
                 transformationFn(finalTransformImg, transformedCanvas, transformedCtx); 
                 const newDataURL = transformedCanvas.toDataURL();
-                drawImageToCanvasAndCommit(newDataURL); 
-                updateImageInfoDisplay();
+                currentImageStateForCanvas = newDataURL; 
+                saveStateToHistory(currentImageStateForCanvas); 
+                
+                const displayImg = new Image();
+                displayImg.onload = () => {
+                    imageCanvas.width = displayImg.naturalWidth;
+                    imageCanvas.height = displayImg.naturalHeight;
+                    ctx.clearRect(0,0,imageCanvas.width, imageCanvas.height);
+                    ctx.drawImage(displayImg,0,0); 
+                    updateImageInfoDisplay();
+                    updateUndoRedoButtons();
+                    hideSpinner();
+                }
+                displayImg.src = currentImageStateForCanvas;
             };
-            finalTransformImg.src = stateWithLiveFilters;
+            finalTransformImg.src = stateWithAllEffects;
         };
         imgForTransform.src = currentImageStateForCanvas; 
     }
@@ -458,7 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
     resizeWidthInput.addEventListener('input', () => updateResizeInputsBasedOnAspectRatio('width'));
     resizeHeightInput.addEventListener('input', () => updateResizeInputsBasedOnAspectRatio('height'));
     resizeBtn.addEventListener('click', () => {
-        if (!currentImageStateForCanvas || cropper) { showModal('Upload an image and ensure no crop is active.'); return; }
+        if (!currentImageStateForCanvas || cropper || isViewingOriginal) { showModal('Upload an image and ensure no crop/view original is active.'); return; }
         const width = parseInt(resizeWidthInput.value); const height = parseInt(resizeHeightInput.value);
         if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) { showModal('Valid positive dimensions required.'); return; }
         
@@ -497,7 +597,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cropBtn.disabled = visible;
 
         toolSectionElements.forEach(section => {
-            if (section) { 
+            if (section && section.id !== 'crop-tool-section') { 
                 section.style.opacity = visible ? '0.5' : '1';
                 section.style.pointerEvents = visible ? 'none' : 'auto';
                 section.querySelectorAll('button, input, select').forEach(control => {
@@ -508,11 +608,12 @@ document.addEventListener('DOMContentLoaded', () => {
         cropPresetButtons.forEach(btn => btn.disabled = visible);
     }
     cropBtn.addEventListener('click', () => {
-        if (!currentImageStateForCanvas) { showModal('Please upload an image first.'); return; }
-        if (cropper) { // If cropper is already active, destroy it and reset UI
+        if (!currentImageStateForCanvas || isViewingOriginal) { showModal('Please upload an image and ensure not viewing original.'); return; }
+        if (cropper) { 
             cropper.destroy(); 
             cropper = null; 
             setCropUIVisible(false); 
+            drawImageToCanvasAndCommit(currentImageStateForCanvas, false); 
             return; 
         }
         showSpinner();
@@ -524,12 +625,21 @@ document.addEventListener('DOMContentLoaded', () => {
             tempCanvasForCrop.height = imgForCrop.naturalHeight;
             tempCtxForCrop.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
             tempCtxForCrop.drawImage(imgForCrop, 0, 0);
-            const stateWithLiveFilters = tempCanvasForCrop.toDataURL();
+            textObjects.forEach(textObj => {
+                tempCtxForCrop.font = `${textObj.size}px ${textObj.fontFamily}`;
+                tempCtxForCrop.fillStyle = textObj.color;
+                tempCtxForCrop.textAlign = 'left'; tempCtxForCrop.textBaseline = 'top';
+                const lines = textObj.text.split('\n');
+                lines.forEach((line, index) => {
+                    tempCtxForCrop.fillText(line, textObj.x, textObj.y + (index * textObj.size * 1.2));
+                });
+            });
+            const stateWithAllEffects = tempCanvasForCrop.toDataURL();
 
-            // Draw the (potentially filtered) image to the main canvas.
-            // This does NOT save to history yet, as the crop hasn't been confirmed.
+            // Draw this fully effected state to the main canvas for Cropper, but DON'T save to history yet.
             // The callback will initialize Cropper.js.
-            drawImageToCanvasAndCommit(stateWithLiveFilters, false, () => { 
+            // We pass 'false' for applyGlobalFiltersAndText because stateWithAllEffects already has them.
+            drawImageToCanvasAndCommit(stateWithAllEffects, false, () => { 
                 cropper = new Cropper(imageCanvas, { 
                     aspectRatio: currentAspectRatio, 
                     viewMode: 1, background: true, autoCropArea: 0.8, responsive: true,
@@ -537,16 +647,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     cropBoxMovable: true, cropBoxResizable: true,
                     ready: () => { 
                         hideSpinner(); 
-                        setCropUIVisible(true); // Show confirm/cancel buttons now that cropper is ready
+                        setCropUIVisible(true); 
                     } 
                 });
-                // setCropUIVisible(true); // Moved to cropper.ready to ensure UI updates after cropper init
             });
         };
-        imgForCrop.onerror = () => {
-            hideSpinner();
-            showModal("Error preparing image for crop.");
-        }
+        imgForCrop.onerror = () => { hideSpinner(); showModal("Error preparing image for crop."); }
         imgForCrop.src = currentImageStateForCanvas; 
     });
 
@@ -558,7 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cropper.destroy(); cropper = null;
         setCropUIVisible(false);
         currentImageStateForCanvas = croppedDataUrl; 
-        // After crop, filters are part of the new base image. Reset currentFilters object.
+        textObjects = []; // Text from before crop is baked in, clear for new text on cropped base
         resetAllFiltersAndDraw(currentImageStateForCanvas, true); 
         showModal('Image cropped.');
     });
@@ -567,8 +673,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!cropper) return;
         cropper.destroy(); cropper = null;
         setCropUIVisible(false);
-        // Redraw the state from before cropping started. This state already has its filters baked in.
-        // Don't save to history as we are canceling.
         drawImageToCanvasAndCommit(currentImageStateForCanvas, false); 
     });
 
@@ -576,16 +680,17 @@ document.addEventListener('DOMContentLoaded', () => {
     viewOriginalBtn.addEventListener('mousedown', () => {
         if (!originalImage || cropper || isViewingOriginal) return;
         isViewingOriginal = true;
+        showSpinner();
         const img = new Image();
         img.onload = () => {
+            imageCanvas.width = img.naturalWidth;
+            imageCanvas.height = img.naturalHeight;
             ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
-            if (imageCanvas.width !== img.naturalWidth || imageCanvas.height !== img.naturalHeight) {
-                imageCanvas.width = img.naturalWidth;
-                imageCanvas.height = img.naturalHeight;
-            }
             ctx.filter = 'none'; 
             ctx.drawImage(img, 0, 0);
+            hideSpinner();
         };
+        img.onerror = () => { hideSpinner(); showModal("Error loading original image."); }
         img.src = originalImage;
     });
 
@@ -596,6 +701,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 previewFiltersOnCanvas(); 
             } else if (originalImage) { 
                 drawImageToCanvasAndCommit(originalImage, false); 
+            } else {
+                resetEditorState(); 
             }
         }
     }
@@ -605,16 +712,17 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault(); 
         if (!originalImage || cropper || isViewingOriginal) return;
         isViewingOriginal = true;
+        showSpinner();
         const img = new Image();
         img.onload = () => {
+            imageCanvas.width = img.naturalWidth;
+            imageCanvas.height = img.naturalHeight;
             ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
-            if (imageCanvas.width !== img.naturalWidth || imageCanvas.height !== img.naturalHeight) {
-                imageCanvas.width = img.naturalWidth;
-                imageCanvas.height = img.naturalHeight;
-            }
             ctx.filter = 'none';
             ctx.drawImage(img, 0, 0);
+            hideSpinner();
         };
+        img.onerror = () => { hideSpinner(); showModal("Error loading original image."); }
         img.src = originalImage;
     }, { passive: false });
     viewOriginalBtn.addEventListener('touchend', restorePreview);
@@ -641,8 +749,20 @@ document.addEventListener('DOMContentLoaded', () => {
             tempCanvas.width = imgToDownload.naturalWidth; 
             tempCanvas.height = imgToDownload.naturalHeight; 
             
+            // Apply the final set of filters and text from current state
             tempCtx.filter = `brightness(${currentFilters.brightness}%) contrast(${currentFilters.contrast}%) grayscale(${currentFilters.grayscale}%) sepia(${currentFilters.sepia}%) invert(${currentFilters.invert}%)`;
             tempCtx.drawImage(imgToDownload, 0, 0, tempCanvas.width, tempCanvas.height);
+             textObjects.forEach(textObj => {
+                tempCtx.font = `${textObj.size}px ${textObj.fontFamily}`; 
+                tempCtx.fillStyle = textObj.color;
+                tempCtx.textAlign = 'left';
+                tempCtx.textBaseline = 'top';
+                const lines = textObj.text.split('\n');
+                lines.forEach((line, index) => {
+                    tempCtx.fillText(line, textObj.x, textObj.y + (index * textObj.size * 1.2));
+                });
+            });
+
 
             const format = fileFormatSelect.value;
             const quality = (format === 'image/jpeg') ? parseFloat(jpegQualitySlider.value) : undefined;
@@ -675,6 +795,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'confirmation', 
             () => { 
                 if (originalImage) {
+                    textObjects = []; 
                     currentImageStateForCanvas = originalImage; 
                     originalCanvasWidth = 0; originalCanvasHeight = 0; 
                     const nameWithoutExtension = originalFileName.substring(0, originalFileName.lastIndexOf('.')) || originalFileName;
@@ -721,4 +842,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
     resetEditorState(); 
 });
-s
