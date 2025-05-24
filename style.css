@@ -14,7 +14,6 @@
     --button-hover-bg: #e0e0e2;
     --btn-active-bg: #cdd0d3; /* For active preset button */
     --background-secondary_alpha_50: rgba(245,245,247,0.5); /* For spinner background */
-    /* Custom Crosshair Cursor - Updated with your Data URI */
     --custom-crosshair: url("data:image/svg+xml,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cline%20x1%3D%2210%22%20y1%3D%220%22%20x2%3D%2210%22%20y2%3D%2220%22%20stroke%3D%22%23FF0436%22%20stroke-width%3D%221%22/%3E%3Cline%20x1%3D%220%22%20y1%3D%2210%22%20x2%3D%2220%22%20y2%3D%2210%22%20stroke%3D%22%23FF0436%22%20stroke-width%3D%221%22/%3E%3C/svg%3E") 10 10, crosshair;
 }
 
@@ -31,8 +30,8 @@ html.dark {
     --shadow-color-medium: rgba(0, 0, 0, 0.35);
     --icon-fill-theme-toggle: #a1a1a6; 
     --button-hover-bg: #4f4f52;
-    --btn-active-bg: #5a5d60; /* For active preset button in dark mode */
-    --background-secondary_alpha_50: rgba(44,44,46,0.7); /* Darker spinner background */
+    --btn-active-bg: #5a5d60; 
+    --background-secondary_alpha_50: rgba(44,44,46,0.7); 
 }
 
 body {
@@ -44,19 +43,19 @@ body {
     -moz-osx-font-smoothing: grayscale;
     padding-bottom: 2rem; 
     
-    -webkit-user-select: none; /* Safari */
-    -moz-user-select: none;    /* Firefox */
-    -ms-user-select: none;     /* Internet Explorer/Edge */
-    user-select: none;         /* Standard syntax */
+    -webkit-user-select: none; 
+    -moz-user-select: none;    
+    -ms-user-select: none;     
+    user-select: none;         
 }
 
 input[type="text"],
 input[type="number"],
 textarea {
-    -webkit-user-select: text; /* Safari */
-    -moz-user-select: text;    /* Firefox */
-    -ms-user-select: text;     /* Internet Explorer/Edge */
-    user-select: text;         /* Standard syntax */
+    -webkit-user-select: text; 
+    -moz-user-select: text;    
+    -ms-user-select: text;     
+    user-select: text;         
 }
 
 
@@ -128,12 +127,21 @@ textarea {
     border-radius: 0.5rem; 
     padding: 0.5rem 0.75rem; 
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    line-height: 1.5; 
 }
 .input-field:focus { 
     outline: none; 
     border-color: var(--accent-color); 
     box-shadow: 0 0 0 2px var(--accent-color_alpha_30); 
 }
+textarea.input-field { 
+    min-height: 4rem; 
+}
+input[type="color"].input-field { 
+    padding: 0.25rem; 
+    height: 2.5rem; 
+}
+
 
 .tool-section { 
     background-color: var(--background-secondary); 
@@ -164,11 +172,12 @@ textarea {
     border: 2px dashed var(--border-color); 
     background-color: var(--background-secondary);
     transition: border-color 0.3s ease; 
-    position: relative; /* Needed for absolute positioning of spinner */
+    position: relative; 
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: var(--custom-crosshair); /* Apply custom cursor here */
+    cursor: var(--custom-crosshair); 
+    overflow: hidden; 
 }
 #image-preview-container.dragover { 
     border-color: var(--accent-color); 
@@ -182,7 +191,6 @@ textarea {
     height: auto;    
     object-fit: contain; 
     border-radius: 0.5rem; 
-    /* cursor: var(--custom-crosshair); /* Alternatively, apply directly to canvas */
 }
 
 /* Loading Spinner Styles */
